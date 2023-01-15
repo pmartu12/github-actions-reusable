@@ -6,7 +6,7 @@ on:
 jobs:
   check:
     timeout-minutes: 10
-    runs-on: decathlon
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:12

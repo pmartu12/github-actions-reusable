@@ -6,7 +6,7 @@ on:
 
 jobs:
   check-swagger-updated:
-    runs-on: decathlon
+    runs-on: ubuntu-latest
     steps:
       - run: |
           sudo rm -rf $GITHUB_WORKSPACE/*

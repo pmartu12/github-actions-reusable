@@ -25,7 +25,7 @@ on:
 jobs:
   php-build-scan-and-push-image:
     timeout-minutes: 40
-    runs-on: decathlon
+    runs-on: ubuntu-latest
     env:
       IMAGE: ${{ inputs.image }}
       REPOSITORY_ADDRESS: ${{ inputs.repository_address }}

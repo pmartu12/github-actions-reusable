@@ -6,7 +6,7 @@ on:
 jobs:
   security-check:
     timeout-minutes: 10
-    runs-on: decathlon
+    runs-on: ubuntu-latest
     steps:
       - run: |
           sudo rm -rf $GITHUB_WORKSPACE/*

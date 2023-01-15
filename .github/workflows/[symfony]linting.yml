@@ -6,7 +6,7 @@ on:
 jobs:
   lint:
     timeout-minutes: 10
-    runs-on: decathlon
+    runs-on: ubuntu-latest
     steps:
       - run: |
           sudo rm -rf $GITHUB_WORKSPACE/*
@@ -32,7 +32,7 @@ jobs:
           args: "/bin/rm -rf /github/workspace/*"
   static-analysis:
     timeout-minutes: 10
-    runs-on: decathlon
+    runs-on: ubuntu-latest
     steps:
       - run: |
           sudo rm -rf $GITHUB_WORKSPACE/*
