@@ -1,0 +1,110 @@
+name: Quality
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    timeout-minutes: 10
+    runs-on: decathlon
+    services:
+      postgres:
+        image: postgres:12
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+      redis:
+        image: redis:alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - run: |
+          sudo rm -rf $GITHUB_WORKSPACE/*
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type f -name ".*" -delete
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type d -name ".*" -exec /bin/rm -rf {} \;
+      - uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Build
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: false
+          tags: image:v1
+          target: php_dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          load: true
+          build-args: |
+            GITHUB_TOKEN=${{ secrets.ACCESS_TOKEN_GITHUB }}
+      - name: Run test
+        run: |
+          docker run --network=host -v ${GITHUB_WORKSPACE}/phpunit:/app/phpunit -e APP_ENV=test -e APP_DEBUG=1 image:v1 /bin/bash -c "composer config --global --auth github-oauth.github.com $ACCESS_TOKEN_GITHUB; \
+          composer install -n --prefer-dist; \
+          php bin/console cache:pool:clear cache.global_clearer; \
+          php bin/console cache:clear --no-warmup; \
+          php bin/console cache:warmup; \
+          php bin/console doctrine:database:drop --force --if-exists; \
+          php bin/console doctrine:database:create; \
+          php bin/console doctrine:schema:create; \
+          vendor/bin/phpunit --configuration phpunit.xml.dist --stop-on-failure --coverage-clover phpunit/phpunit.coverage.xml --log-junit phpunit/junit.xml"
+        env:
+          ACCESS_TOKEN_GITHUB: ${{secrets.ACCESS_TOKEN_GITHUB}}
+      - name: Upload phpunit artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: phpunit
+          path: phpunit
+      - name: Run infection
+        run: |
+          docker run --network=host -v ${GITHUB_WORKSPACE}/phpunit:/app/phpunit -e APP_ENV=test -e APP_DEBUG=1 image:v1 /bin/bash -c "composer config --global --auth github-oauth.github.com $ACCESS_TOKEN_GITHUB; \ 
+          composer install -n --prefer-dist; \
+          php bin/console cache:pool:clear cache.global_clearer; \
+          php bin/console cache:clear --no-warmup; \
+          php bin/console cache:warmup; \
+          php bin/console doctrine:database:drop --force --if-exists; \
+          php bin/console doctrine:database:create; \
+          php bin/console doctrine:schema:create; \
+          infection --only-covered --threads=4; \
+          cat infection-log.txt "
+        env:
+          ACCESS_TOKEN_GITHUB: ${{secrets.ACCESS_TOKEN_GITHUB}}
+      - name: clean
+        uses: docker://centos
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          args: "/bin/rm -rf /github/workspace/*"
+  sonar:
+    needs: [test]
+    timeout-minutes: 10
+    runs-on: decathlon
+    steps:
+      - run: |
+          sudo rm -rf $GITHUB_WORKSPACE/*
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type f -name ".*" -delete
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type d -name ".*" -exec /bin/rm -rf {} \;
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Download phpunit artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: phpunit
+          path: phpunit
+      - name: SonarCloud Scan
+        uses: sonarsource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: clean
+        uses: docker://centos
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          args: "/bin/rm -rf /github/workspace/*"

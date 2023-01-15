@@ -1,0 +1,25 @@
+name: Security
+
+on:
+  workflow_call:
+
+jobs:
+  security-check:
+    timeout-minutes: 10
+    runs-on: decathlon
+    steps:
+      - run: |
+          sudo rm -rf $GITHUB_WORKSPACE/*
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type f -name ".*" -delete
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type d -name ".*" -exec /bin/rm -rf {} \;
+      - uses: actions/checkout@v2
+      - name: Run security check
+        run: |
+          curl -sS https://get.symfony.com/cli/installer | bash
+          /home/runner/.symfony5/bin/symfony security:check
+      - name: clean
+        uses: docker://centos
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          args: "/bin/rm -rf /github/workspace/*"

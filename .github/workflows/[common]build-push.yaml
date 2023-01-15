@@ -1,0 +1,93 @@
+name: Build, push Docker images to Google Artifact Registry
+
+on:
+  workflow_call:
+    inputs:
+      repository_address:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
+      assets:
+        required: true
+        type: boolean
+      target:
+        required: true
+        type: string
+      assets-path:
+        required: false
+        type: string
+      assets-destination:
+        required: false
+        type: string
+
+jobs:
+  php-build-scan-and-push-image:
+    timeout-minutes: 40
+    runs-on: decathlon
+    env:
+      IMAGE: ${{ inputs.image }}
+      REPOSITORY_ADDRESS: ${{ inputs.repository_address }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build assets
+        if: ${{ inputs.assets }}
+        uses: docker://node:lts-slim
+        with:
+          args: /bin/sh -c "npm i && npm run build"
+
+      - id: 'auth'
+        if: github.event_name == 'push'
+        uses: 'google-github-actions/auth@v0'
+        with:
+          credentials_json: '${{ secrets.GCP_PREPROD_SA_KEY }}'
+
+      - id: 'upload-files'
+        if: ${{ inputs.assets }}
+        uses: 'google-github-actions/upload-cloud-storage@v0'
+        with:
+          path: ${{ inputs.assets-path }}
+          destination: ${{ inputs.assets-destination }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Build
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: false
+          tags: ${{ env.IMAGE }}
+          target: ${{ inputs.target }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          load: true
+
+      - name: Generate Tag
+        run: |
+          branch=${GITHUB_REF##*/}
+          sha=${GITHUB_SHA:0:7}
+          ts=$(date +%s)
+          echo "TAG=${branch}-${sha}-${ts}" >> $GITHUB_ENV
+
+      - name: Tag image
+        if: ${{ github.actor != 'dependabot[bot]' }}
+        run: |
+          docker image tag $IMAGE $REPOSITORY_ADDRESS/$IMAGE:${{ env.TAG }}
+          docker image tag $IMAGE $REPOSITORY_ADDRESS/$IMAGE:latest
+
+
+      - name: Push image to google registry
+        if: github.event_name == 'push'
+        run: |
+          gcloud auth configure-docker europe-west2-docker.pkg.dev --quiet
+          docker push $REPOSITORY_ADDRESS/$IMAGE:${{ env.TAG }}
+          docker push $REPOSITORY_ADDRESS/$IMAGE:latest
+
+      - name: clean
+        uses: docker://centos
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          args: "/bin/rm /github/workspace -rf"

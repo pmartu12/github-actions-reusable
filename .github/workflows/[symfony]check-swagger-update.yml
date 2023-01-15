@@ -1,0 +1,26 @@
+name: Check if swagger is updated
+
+on:
+  workflow_call:
+
+
+jobs:
+  check-swagger-updated:
+    runs-on: decathlon
+    steps:
+      - run: |
+          sudo rm -rf $GITHUB_WORKSPACE/*
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type f -name ".*" -delete
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type d -name ".*" -exec /bin/rm -rf {} \;
+      - name: Checkout sources
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Generate diff and check files
+        uses: docker://node:18
+        with:
+          args: /bin/sh -c "
+            git diff --name-status origin/develop...origin/$GITHUB_REF_NAME > diff-status-files.txt ;
+            cat diff-status-files.txt ;
+            node ./.github/scripts/npm/pull-request/check-swagger-update.js

@@ -1,0 +1,69 @@
+name: Naming convention
+
+on:
+  workflow_call:
+
+jobs:
+  branch-name:
+    runs-on: decathlon
+    steps:
+      - run: |
+          sudo rm -rf $GITHUB_WORKSPACE/*
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type f -name ".*" -delete
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type d -name ".*" -exec /bin/rm -rf {} \;
+      - uses: actions/checkout@v2
+      - name: Git commit naming conventions
+        run: |
+          BRANCH_REGEX="^refs\/heads\/(feature|hotfix)\/\(DCTHLNRNT-[0-9]+\)-.+$|refs\/heads\/core\/update|refs\/heads\/core-update"
+            if [[ "${{ github.ref }}" =~ $BRANCH_REGEX ]] ; then
+                echo "ok"
+            elif [ "${{ github.event_name }}" != "push" ] ; then
+                echo "It is not a push, skip!"
+            else
+              echo "You must respect branch naming convetion rules for ${{ github.ref }}"
+              exit 1
+          fi
+  commit-jira:
+    runs-on: decathlon
+    steps:
+      - run: |
+          sudo rm -rf $GITHUB_WORKSPACE/*
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type f -name ".*" -delete
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type d -name ".*" -exec /bin/rm -rf {} \;
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Git commit using jira task number
+        run: |
+          if git cherry -v origin/develop | grep '\(DCTHLNRNT-[0-9]\)'
+          then
+              echo "ok"
+          else
+            echo "You must respect commit naming convetion rules"
+            exit 1
+          fi
+      - name: clean
+        uses: docker://centos
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          args: "/bin/rm -rf /github/workspace/*"
+  commit-lint:
+    runs-on: decathlon
+    steps:
+      - run: |
+          sudo rm -rf $GITHUB_WORKSPACE/*
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type f -name ".*" -delete
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type d -name ".*" -exec /bin/rm -rf {} \;
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - run: docker build -f .docker/nodejs/Dockerfile -t commitlint .
+      - name: Run commit-lint
+        run: docker run --rm -v ${PWD}:/app --workdir /app commitlint npx commitlint --from $(git rev-list --min-parents=2 --max-count=1 HEAD) --to $(git rev-parse --short HEAD) --verbose
+      - name: clean
+        uses: docker://centos
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          args: "/bin/rm -rf /github/workspace/*"

@@ -1,0 +1,68 @@
+name: Linting
+
+on:
+  workflow_call:
+
+jobs:
+  lint:
+    timeout-minutes: 10
+    runs-on: decathlon
+    steps:
+      - run: |
+          sudo rm -rf $GITHUB_WORKSPACE/*
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type f -name ".*" -delete
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type d -name ".*" -exec /bin/rm -rf {} \;
+      - uses: actions/checkout@v2
+      - name: Run lint
+        uses: docker://bitnami/php-fpm:8.1
+        with:
+          args: /bin/sh -c "
+            install_packages autoconf make;
+            composer global config --no-plugins allow-plugins.dealerdirect/phpcodesniffer-composer-installer true ;
+            composer global require slevomat/coding-standard:8.4.0 --no-interaction --prefer-dist --no-progress --classmap-authoritative ;
+            composer global require squizlabs/php_codesniffer:3.7.1 --no-interaction --prefer-dist --no-progress --classmap-authoritative ;
+            composer global require doctrine/coding-standard:9.0.1 --no-interaction --prefer-dist --no-progress --classmap-authoritative ;
+            export PATH=$(composer global config bin-dir --absolute --quiet):${PATH} ;
+            make cscheck;"
+      - name: clean
+        uses: docker://centos
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          args: "/bin/rm -rf /github/workspace/*"
+  static-analysis:
+    timeout-minutes: 10
+    runs-on: decathlon
+    steps:
+      - run: |
+          sudo rm -rf $GITHUB_WORKSPACE/*
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type f -name ".*" -delete
+          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type d -name ".*" -exec /bin/rm -rf {} \;
+      - uses: actions/checkout@v2
+      - name: Install vendor
+        uses: docker://bitnami/php-fpm:8.1
+        with:
+          args: /bin/sh -c "
+            if [ -n ${ACCESS_TOKEN_GITHUB} ] ; then  composer config -g github-oauth.github.com $ACCESS_TOKEN_GITHUB ; fi ;
+            composer install -n --prefer-dist
+            "
+      - name: Run phpstan
+        uses: docker://bitnami/php-fpm:8.1
+        with:
+          args: /bin/sh -c "
+            install_packages autoconf make g++ unzip;
+            composer global config --no-plugins allow-plugins.dealerdirect/phpcodesniffer-composer-installer true ;
+            composer global require "phpstan/phpstan:1.8.2" --no-interaction --prefer-dist --no-progress --classmap-authoritative ;
+            composer global require "doctrine/coding-standard:9.0.1" --no-interaction --prefer-dist --no-progress --classmap-authoritative ;
+            composer global require "phpstan/phpstan-symfony:1.2.11" --no-interaction --prefer-dist --no-progress --classmap-authoritative ;
+            composer global require "thecodingmachine/phpstan-safe-rule:1.2.0" --no-interaction --prefer-dist --no-progress --classmap-authoritative ;
+            composer global require "thecodingmachine/phpstan-strict-rules:1.0.0" --no-interaction --prefer-dist --no-progress --classmap-authoritative ;
+            export PATH=$(composer global config bin-dir --absolute --quiet):${PATH} ;
+            sed -i 's|root|github/home|g' phpstan.neon ;
+            make phpstan ;"
+      - name: clean
+        uses: docker://centos
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          args: "/bin/rm -rf /github/workspace/*"
