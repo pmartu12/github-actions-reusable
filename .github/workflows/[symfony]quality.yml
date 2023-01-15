@@ -80,31 +80,4 @@ jobs:
         continue-on-error: true
         with:
           args: "/bin/rm -rf /github/workspace/*"
-  sonar:
-    needs: [test]
-    timeout-minutes: 10
-    runs-on: decathlon
-    steps:
-      - run: |
-          sudo rm -rf $GITHUB_WORKSPACE/*
-          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type f -name ".*" -delete
-          sudo find $GITHUB_WORKSPACE/ -maxdepth 1 -type d -name ".*" -exec /bin/rm -rf {} \;
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-      - name: Download phpunit artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: phpunit
-          path: phpunit
-      - name: SonarCloud Scan
-        uses: sonarsource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      - name: clean
-        uses: docker://centos
-        if: ${{ always() }}
-        continue-on-error: true
-        with:
-          args: "/bin/rm -rf /github/workspace/*"
+
